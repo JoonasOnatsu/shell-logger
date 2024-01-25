@@ -2,10 +2,7 @@
 
 # ==============================================================================
 # Shell-logger install script.
-# Based on 'shell-logger' project by rcmdnk (https://github.com/rcmdnk).
-#
-# Source:
-# https://github.com/rcmdnk/shell-logger.git
+# Based on 'shell-logger' project by rcmdnk (https://github.com/rcmdnk/shell-logger).
 # ==============================================================================
 
 # cSpell: disable
