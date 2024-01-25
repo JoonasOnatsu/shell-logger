@@ -16,7 +16,7 @@
 #set -x
 
 INSTALL_SCRIPTS=(
-  "https://github.com/JoonasOnatsu/shell-logger/raw/master/etc/shell-logger"
+  "https://github.com/JoonasOnatsu/shell-logger/raw/master/shell-logger.sh"
 )
 INSTALL_FORCE=false
 INSTALL_PREFIX=
