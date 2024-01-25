@@ -216,7 +216,7 @@ cat <<- EOF
                             INSTALLATION COMPLETE!
 
 To use the 'shell-logger', you must source the shell-logger script in your
-shell initialzation file (e.g ~/.bashrc/~.zshrc):
+shell initialization file (e.g ~/.bashrc/~.zshrc):
 
 source "${INSTALL_PREFIX}/shell-logger.sh"
 
