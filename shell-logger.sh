@@ -14,6 +14,14 @@ LOGGER_NAME="shell-logger"
 LOGGER_VERSION="v0.3.0"
 LOGGER_DATE="26/Jan/2024"
 
+# WIP:
+# https://tldp.org/LDP/abs/html/fto.html
+# https://opensource.com/article/22/7/print-stack-trace-bash-scripts
+# https://stackoverflow.com/questions/25492953/bash-how-to-get-the-call-chain-on-errors
+# https://docwhat.org/tracebacks-in-bash
+# https://gist.github.com/Alphadelta14/0d9175767b406a6d3d402099f134d816
+# https://gist.github.com/Asher256/4c68119705ffa11adb7446f297a7beae
+
 # MIT License
 #
 # Copyright (c) 2017 rcmdnk
@@ -56,10 +64,9 @@ LOGGER_NOTICE_COLOR=${LOGGER_NOTICE_COLOR:-"36"}
 LOGGER_WARNING_COLOR=${LOGGER_WARNING_COLOR:-"33"}
 LOGGER_ERROR_COLOR=${LOGGER_ERROR_COLOR:-"31"}
 LOGGER_COLOR=${LOGGER_COLOR:-auto}
-
 LOGGER_COLORS=("${LOGGER_DEBUG_COLOR}" "${LOGGER_INFO_COLOR}" "${LOGGER_NOTICE_COLOR}" "${LOGGER_WARNING_COLOR}" "${LOGGER_ERROR_COLOR}")
-LOGGER_ERROR_RETURN_CODE=${LOGGER_ERROR_RETURN_CODE:-100}
-LOGGER_ERROR_TRACE=${LOGGER_ERROR_TRACE:-true}
+#LOGGER_ERROR_RETURN_CODE=${LOGGER_ERROR_RETURN_CODE:-100}
+#LOGGER_ERROR_TRACE=${LOGGER_ERROR_TRACE:-true}
 
 # Other global variables.
 _LOGGER_WRAP=0
@@ -87,12 +94,18 @@ function _logger() {
   shift
 
   # Construct the message prefix.
-  local msg_prefix=
+  local msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")]"
+
   if [[ -n ${BASH_VERSION} ]]; then
-    msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${BASH_SOURCE[$((wrap + 1))]}:${BASH_LINENO[${wrap}]}] [${LOGGER_LEVELS[${level}]}]"
+    if [[ -n "${BASH_SOURCE[$((wrap + 1))]}" ]] && [[ -n "${BASH_LINENO[${wrap}]}" ]]; then
+      msg_prefix+="[${BASH_SOURCE[$((wrap + 1))]}:${BASH_LINENO[${wrap}]}]"
+    fi
   elif [[ -n ${ZSH_VERSION-} ]]; then
-    msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${funcfiletrace[${idx}]}] [${LOGGER_LEVELS[${level}]}]"
+    if [[ -n "${funcfiletrace[${wrap}]}" ]]; then
+      msg_prefix+="[${funcfiletrace[${wrap}]}]"
+    fi
   fi
+  msg_prefix+="[${LOGGER_LEVELS[${level}]}]"
 
   # Output to stdout by default.
   local logger_print=printf
@@ -106,17 +119,16 @@ function _logger() {
 
   local printf_fmt=
 
-  # https://tldp.org/LDP/abs/html/fto.html
+
 
   if [[ ${LOGGER_COLOR} == "always" ]] || { [[ ${LOGGER_COLOR} == "auto" ]] && [[ -t ${logger_outfile} ]]; }; then
     printf_fmt="\\e[${LOGGER_COLORS[${level}]}m%s\\e[0m\\n"
   else
-    printf_fmt="%s\\n"
+    printf_fmt='%s\n'
   fi
 
-  # Add prefix with a space only if prefix not is empty.
   # Escape any funnies from the message, to keep eval from exploding.
-  eval "${logger_print} \"${printf_fmt}\"  \"${msg_prefix:+"${msg_prefix} "} $(printf '%q' "$*")\""
+  eval "${logger_print} \"${printf_fmt}\"  \"${msg_prefix} $(printf '%q' "$*")\""
 }
 
 function log_debug() {
@@ -135,89 +147,93 @@ function log_warn() {
   ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_WARNING}" "$*"
 }
-
 function log_err() {
   ((_LOGGER_WRAP++)) || true
-
-  if [[ ${LOGGER_ERROR_TRACE:-false} == true ]]; then
-    {
-      local first=0
-      if [[ -n ${BASH_VERSION} ]]; then
-        local current_source="$(printf '%s' "${BASH_SOURCE[0]##*/}" | cut -d"." -f1)"
-        local func="${FUNCNAME[1]}"
-        local idx=$((${#FUNCNAME[@]} - 2))
-      elif [[ -n ${ZSH_VERSION-} ]]; then
-        emulate -L ksh
-        local current_source="$(printf '%s' "${funcfiletrace[0]##*/}" | cut -d":" -f1 | cut -d"." -f1)"
-        local func="${funcstack[1]}"
-        local idx=$((${#funcstack[@]} - 1))
-        local last_source="${funcfiletrace[${idx}]%:*}"
-        [[ ${last_source} == "zsh" ]] && ((idx--))
-      fi
-
-      if [[ ${current_source} == "shell-logger" ]] && [[ ${func} == err ]]; then
-        local first=1
-      fi
-
-      if [[ ${idx} -ge ${first} ]]; then
-        printf 'Traceback (most recent call last):\n'
-      fi
-
-      while [[ ${idx} -ge ${first} ]]; do
-        if [[ -n ${BASH_VERSION} ]]; then
-          local file="${BASH_SOURCE[$((idx + 1))]}"
-          local line="${BASH_LINENO[${idx}]}"
-          local func=""
-
-          if [[ ${BASH_LINENO[$((idx + 1))]} -ne 0 ]]; then
-            if [[ ${FUNCNAME[$((idx + 1))]} == "source" ]]; then
-              func=", in ${BASH_SOURCE[$((idx + 2))]}"
-            else
-              func=", in ${FUNCNAME[$((idx + 1))]}"
-            fi
-          fi
-
-          local func_call="${FUNCNAME[${idx}]}"
-          if [[ ${func_call} == "source" ]]; then
-            func_call="${func_call} ${BASH_SOURCE[${idx}]}"
-          else
-            func_call="${func_call}()"
-          fi
-        elif [[ -n ${ZSH_VERSION-} ]]; then
-          emulate -L ksh
-          local file="${funcfiletrace[${idx}]%:*}"
-          local line="${funcfiletrace[${idx}]#*:}"
-          local func=""
-
-          if [[ -n ${funcstack[$((idx + 1))]} ]]; then
-            if [[ ${funcstack[$((idx + 1))]} == "${funcfiletrace[${idx}]%:*}" ]]; then
-              func=", in ${funcfiletrace[$((idx + 1))]%:*}"
-            else
-              func=", in ${funcstack[$((idx + 1))]}"
-            fi
-          fi
-
-          local func_call="${funcstack[${idx}]}"
-          if [[ ${func_call} == "${funcfiletrace[$((idx - 1))]%:*}" ]]; then
-            func_call="source ${funcfiletrace[$((idx - 1))]%:*}"
-          else
-            func_call="${func_call}()"
-          fi
-        fi
-
-        printf '  File \"%s\", line %s%s\n' "${file}" "${line}" "${func}"
-
-        if [[ ${idx} -gt ${first} ]]; then
-          printf '    %s\n' "${func_call}"
-        else
-          printf '\n'
-        fi
-
-        ((idx--))
-      done
-    } 1>&2
-  fi
   _logger "${LOG_LEVEL_ERROR}" "$*"
-
-  return "${LOGGER_ERROR_RETURN_CODE}"
 }
+
+# function log_err() {
+#   ((_LOGGER_WRAP++)) || true
+#
+#   if [[ ${LOGGER_ERROR_TRACE:-false} == true ]]; then
+#     {
+#       local first=0
+#       if [[ -n ${BASH_VERSION} ]]; then
+#         local current_source="$(printf '%s' "${BASH_SOURCE[0]##*/}" | cut -d"." -f1)"
+#         local func="${FUNCNAME[1]}"
+#         local idx=$((${#FUNCNAME[@]} - 2))
+#       elif [[ -n ${ZSH_VERSION-} ]]; then
+#         emulate -L ksh
+#         local current_source="$(printf '%s' "${funcfiletrace[0]##*/}" | cut -d":" -f1 | cut -d"." -f1)"
+#         local func="${funcstack[1]}"
+#         local idx=$((${#funcstack[@]} - 1))
+#         local last_source="${funcfiletrace[${idx}]%:*}"
+#         [[ ${last_source} == "zsh" ]] && ((idx--))
+#       fi
+#
+#       if [[ ${current_source} == "shell-logger" ]] && [[ ${func} == err ]]; then
+#         local first=1
+#       fi
+#
+#       if [[ ${idx} -ge ${first} ]]; then
+#         printf 'Traceback (most recent call last):\n'
+#       fi
+#
+#       while [[ ${idx} -ge ${first} ]]; do
+#         if [[ -n ${BASH_VERSION} ]]; then
+#           local file="${BASH_SOURCE[$((idx + 1))]}"
+#           local line="${BASH_LINENO[${idx}]}"
+#           local func=""
+#
+#           if [[ ${BASH_LINENO[$((idx + 1))]} -ne 0 ]]; then
+#             if [[ ${FUNCNAME[$((idx + 1))]} == "source" ]]; then
+#               func=", in ${BASH_SOURCE[$((idx + 2))]}"
+#             else
+#               func=", in ${FUNCNAME[$((idx + 1))]}"
+#             fi
+#           fi
+#
+#           local func_call="${FUNCNAME[${idx}]}"
+#           if [[ ${func_call} == "source" ]]; then
+#             func_call="${func_call} ${BASH_SOURCE[${idx}]}"
+#           else
+#             func_call="${func_call}()"
+#           fi
+#         elif [[ -n ${ZSH_VERSION-} ]]; then
+#           emulate -L ksh
+#           local file="${funcfiletrace[${idx}]%:*}"
+#           local line="${funcfiletrace[${idx}]#*:}"
+#           local func=""
+#
+#           if [[ -n ${funcstack[$((idx + 1))]} ]]; then
+#             if [[ ${funcstack[$((idx + 1))]} == "${funcfiletrace[${idx}]%:*}" ]]; then
+#               func=", in ${funcfiletrace[$((idx + 1))]%:*}"
+#             else
+#               func=", in ${funcstack[$((idx + 1))]}"
+#             fi
+#           fi
+#
+#           local func_call="${funcstack[${idx}]}"
+#           if [[ ${func_call} == "${funcfiletrace[$((idx - 1))]%:*}" ]]; then
+#             func_call="source ${funcfiletrace[$((idx - 1))]%:*}"
+#           else
+#             func_call="${func_call}()"
+#           fi
+#         fi
+#
+#         printf '  File \"%s\", line %s%s\n' "${file}" "${line}" "${func}"
+#
+#         if [[ ${idx} -gt ${first} ]]; then
+#           printf '    %s\n' "${func_call}"
+#         else
+#           printf '\n'
+#         fi
+#
+#         ((idx--))
+#       done
+#     } 1>&2
+#   fi
+#   _logger "${LOG_LEVEL_ERROR}" "$*"
+#
+#   return "${LOGGER_ERROR_RETURN_CODE}"
+# }
