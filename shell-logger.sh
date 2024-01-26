@@ -10,9 +10,9 @@
 # shellcheck source=/dev/null
 # shellcheck disable=SC2317,SC2312,SC2155
 
-readonly LOGGER_NAME="shell-logger"
-readonly LOGGER_VERSION="v0.3.0"
-readonly LOGGER_DATE="26/Jan/2024"
+LOGGER_NAME="shell-logger"
+LOGGER_VERSION="v0.3.0"
+LOGGER_DATE="26/Jan/2024"
 
 # MIT License
 #
@@ -37,11 +37,14 @@ readonly LOGGER_DATE="26/Jan/2024"
 # SOFTWARE.
 
 # Log level numeric values.
-readonly LOG_LEVEL_DEBUG=0
-readonly LOG_LEVEL_INFO=1
-readonly LOG_LEVEL_NOTICE=2
-readonly LOG_LEVEL_WARNING=3
-readonly LOG_LEVEL_ERROR=4
+LOG_LEVEL_DEBUG=0
+LOG_LEVEL_INFO=1
+LOG_LEVEL_NOTICE=2
+LOG_LEVEL_WARNING=3
+LOG_LEVEL_ERROR=4
+
+# Log level text representations.
+LOGGER_LEVELS=("DEBUG" "INFO" "NOTICE" "WARNING" "ERROR")
 
 # Default settings.
 LOGGER_DATE_FORMAT=${LOGGER_DATE_FORMAT:-'%Y/%m/%d %H:%M:%S'}
@@ -55,9 +58,6 @@ LOGGER_ERROR_COLOR=${LOGGER_ERROR_COLOR:-"31"}
 LOGGER_COLOR=${LOGGER_COLOR:-auto}
 
 LOGGER_COLORS=("${LOGGER_DEBUG_COLOR}" "${LOGGER_INFO_COLOR}" "${LOGGER_NOTICE_COLOR}" "${LOGGER_WARNING_COLOR}" "${LOGGER_ERROR_COLOR}")
-if [[ ${LOGGER_LEVELS-} == "" ]]; then
-  LOGGER_LEVELS=("DEBUG" "INFO" "NOTICE" "WARNING" "ERROR")
-fi
 LOGGER_ERROR_RETURN_CODE=${LOGGER_ERROR_RETURN_CODE:-100}
 LOGGER_ERROR_TRACE=${LOGGER_ERROR_TRACE:-true}
 
@@ -80,27 +80,9 @@ function _validate_level() {
 
 function _logger_level_str() {
   [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
-
   [[ $# -eq 0 ]] && return
   _validate_level "$1" || return
-
-  local level=${1:-1}
-  local str=
-
-  case "${level}" in
-    "${LOG_LEVEL_DEBUG}") str="DEBUG" ;;
-    "${LOG_LEVEL_INFO}") str="INFO" ;;
-    "${LOG_LEVEL_NOTICE}") str="NOTICE" ;;
-    "${LOG_LEVEL_WARNING}") str="WARNING" ;;
-    "${LOG_LEVEL_ERROR}") str="ERROR" ;;
-    *) return ;;
-  esac
-
-  printf '[%s]' "${str}"
-}
-
-function _logger_time_str() {
-  printf '[%s]' "$(date +"${LOGGER_DATE_FORMAT}")"
+  printf '[%s]' "${LOGGER_LEVELS[${1:-1}]}"
 }
 
 function _logger_file_str() {
@@ -128,7 +110,7 @@ function _logger() {
   shift
 
   # Construct the message prefix.
-  local msg_prefix="$(_logger_time_str)$(_logger_file_str "${wrap}")$(_logger_level_str "${level}")"
+  local msg_prefix="$(date +"${LOGGER_DATE_FORMAT}")$(_logger_file_str "${wrap}")$(_logger_level_str "${level}")"
 
   # Add prefix with a space only if prefix not is empty.
   local msg="${msg_prefix:+${msg_prefix} }$*"
