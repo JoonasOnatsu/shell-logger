@@ -44,6 +44,7 @@ LOGGER_DATE_FORMAT=${LOGGER_DATE_FORMAT:-'%Y/%m/%d %H:%M:%S'}
 # 2 -> notice
 # 3 -> warning
 # 4 -> error
+
 LOGGER_LEVEL=${LOGGER_LEVEL:-1}
 LOGGER_STDERR_LEVEL=${LOGGER_STDERR_LEVEL:-4}
 LOGGER_DEBUG_COLOR=${LOGGER_DEBUG_COLOR:-"3"}
@@ -68,26 +69,6 @@ _LOGGER_WRAP=0
 # Functions.
 function _logger_version() {
   printf '%s %s %s\n' "${_LOGGER_NAME}" "${_LOGGER_VERSION}" "${_LOGGER_DATE}"
-}
-
-function _get_curr_logger_level() {
-  local level=${1:-1}
-
-  # Validate log level setting.
-  if ! expr "${level}" : '[0-9]*' > /dev/null; then
-    [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
-
-    local idx=0
-    while [[ ${idx} -lt ${#LOGGER_LEVELS[@]} ]]; do
-      if [[ ${level} == "${LOGGER_LEVELS[${idx}]}" ]]; then
-        level=${idx}
-        break
-      fi
-      ((idx++))
-    done
-  fi
-
-  printf '%s' "${level}"
 }
 
 function _logger_level_str() {
@@ -122,7 +103,7 @@ function _logger() {
   _LOGGER_WRAP=0
 
   [[ $# -eq 0 ]] && return
-  [[ $1 -lt "$(_get_curr_logger_level "${LOGGER_LEVEL}")" ]] && return
+  [[ $1 -lt ${LOGGER_LEVEL} ]] && return
 
   local level=$1
   shift
