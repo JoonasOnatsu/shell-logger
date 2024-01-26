@@ -10,9 +10,9 @@
 # shellcheck source=/dev/null
 # shellcheck disable=SC2317,SC2312,SC2155
 
-_LOGGER_NAME="shell-logger"
-_LOGGER_VERSION="v0.2.0"
-_LOGGER_DATE="04/Feb/2019"
+readonly LOGGER_NAME="shell-logger"
+readonly LOGGER_VERSION="v0.3.0"
+readonly LOGGER_DATE="26/Jan/2024"
 
 # MIT License
 #
@@ -36,15 +36,15 @@ _LOGGER_DATE="04/Feb/2019"
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Default variables.
+# Log level numeric values.
+readonly LOG_LEVEL_DEBUG=0
+readonly LOG_LEVEL_INFO=1
+readonly LOG_LEVEL_NOTICE=2
+readonly LOG_LEVEL_WARNING=3
+readonly LOG_LEVEL_ERROR=4
+
+# Default settings.
 LOGGER_DATE_FORMAT=${LOGGER_DATE_FORMAT:-'%Y/%m/%d %H:%M:%S'}
-
-# 0 -> debug
-# 1 -> info
-# 2 -> notice
-# 3 -> warning
-# 4 -> error
-
 LOGGER_LEVEL=${LOGGER_LEVEL:-1}
 LOGGER_STDERR_LEVEL=${LOGGER_STDERR_LEVEL:-4}
 LOGGER_DEBUG_COLOR=${LOGGER_DEBUG_COLOR:-"3"}
@@ -53,13 +53,11 @@ LOGGER_NOTICE_COLOR=${LOGGER_NOTICE_COLOR:-"36"}
 LOGGER_WARNING_COLOR=${LOGGER_WARNING_COLOR:-"33"}
 LOGGER_ERROR_COLOR=${LOGGER_ERROR_COLOR:-"31"}
 LOGGER_COLOR=${LOGGER_COLOR:-auto}
+
 LOGGER_COLORS=("${LOGGER_DEBUG_COLOR}" "${LOGGER_INFO_COLOR}" "${LOGGER_NOTICE_COLOR}" "${LOGGER_WARNING_COLOR}" "${LOGGER_ERROR_COLOR}")
 if [[ ${LOGGER_LEVELS-} == "" ]]; then
   LOGGER_LEVELS=("DEBUG" "INFO" "NOTICE" "WARNING" "ERROR")
 fi
-LOGGER_SHOW_TIME=${LOGGER_SHOW_TIME:-true}
-LOGGER_SHOW_FILE=${LOGGER_SHOW_FILE:-true}
-LOGGER_SHOW_LEVEL=${LOGGER_SHOW_LEVEL:-true}
 LOGGER_ERROR_RETURN_CODE=${LOGGER_ERROR_RETURN_CODE:-100}
 LOGGER_ERROR_TRACE=${LOGGER_ERROR_TRACE:-true}
 
@@ -68,24 +66,44 @@ _LOGGER_WRAP=0
 
 # Functions.
 function _logger_version() {
-  printf '%s %s %s\n' "${_LOGGER_NAME}" "${_LOGGER_VERSION}" "${_LOGGER_DATE}"
+  printf '%s %s %s\n' "${LOGGER_NAME}" "${LOGGER_VERSION}" "${LOGGER_DATE}"
+}
+
+function _validate_level() {
+  [[ $# -eq 0 ]] && return 1
+  if [[ $1 -ge ${LOG_LEVEL_DEBUG} ]] && [[ $1 -le ${LOG_LEVEL_ERROR} ]]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 function _logger_level_str() {
-  [[ ${LOGGER_SHOW_LEVEL:-false} == false ]] && return
-  local level=${1:-1}
-
   [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
-  printf '[%s]' "${LOGGER_LEVELS[${level}]}"
+
+  [[ $# -eq 0 ]] && return
+  _validate_level "$1" || return
+
+  local level=${1:-1}
+  local str=
+
+  case "${level}" in
+    "${LOG_LEVEL_DEBUG}") str="DEBUG" ;;
+    "${LOG_LEVEL_INFO}") str="INFO" ;;
+    "${LOG_LEVEL_NOTICE}") str="NOTICE" ;;
+    "${LOG_LEVEL_WARNING}") str="WARNING" ;;
+    "${LOG_LEVEL_ERROR}") str="ERROR" ;;
+    *) return ;;
+  esac
+
+  printf '[%s]' "${str}"
 }
 
 function _logger_time_str() {
-  [[ ${LOGGER_SHOW_TIME:-false} == false ]] && return
   printf '[%s]' "$(date +"${LOGGER_DATE_FORMAT}")"
 }
 
 function _logger_file_str() {
-  [[ ${LOGGER_SHOW_FILE:-false} == false ]] && return
   local idx=${1:-0}
 
   if [[ -n ${BASH_VERSION} ]]; then
@@ -103,11 +121,13 @@ function _logger() {
   _LOGGER_WRAP=0
 
   [[ $# -eq 0 ]] && return
+  _validate_level "$1" || return
   [[ $1 -lt ${LOGGER_LEVEL} ]] && return
 
-  local level=$1
+  local level=${1:-1}
   shift
 
+  # Construct the message prefix.
   local msg_prefix="$(_logger_time_str)$(_logger_file_str "${wrap}")$(_logger_level_str "${level}")"
 
   # Add prefix with a space only if prefix not is empty.
@@ -135,37 +155,22 @@ function _logger() {
 
 function debug() {
   ((_LOGGER_WRAP++)) || true
-  _logger 0 "$*"
-}
-
-function information() {
-  ((_LOGGER_WRAP++)) || true
-  _logger 1 "$*"
+  _logger "${LOG_LEVEL_DEBUG}" "$*"
 }
 function info() {
   ((_LOGGER_WRAP++)) || true
-  information "$*"
-}
-
-function notification() {
-  ((_LOGGER_WRAP++)) || true
-  _logger 2 "$*"
+  _logger "${LOG_LEVEL_INFO}" "$*"
 }
 function notice() {
   ((_LOGGER_WRAP++)) || true
-  notification "$*"
-}
-
-function warning() {
-  ((_LOGGER_WRAP++)) || true
-  _logger 3 "$*"
+  _logger "${LOG_LEVEL_NOTICE}" "$*"
 }
 function warn() {
   ((_LOGGER_WRAP++)) || true
-  warning "$*"
+  _logger "${LOG_LEVEL_WARNING}" "$*"
 }
 
-function error() {
+function err() {
   ((_LOGGER_WRAP++)) || true
 
   if [[ ${LOGGER_ERROR_TRACE:-false} == true ]]; then
@@ -246,11 +251,7 @@ function error() {
       done
     } 1>&2
   fi
-  _logger 4 "$*"
+  _logger "${LOG_LEVEL_ERROR}" "$*"
 
   return "${LOGGER_ERROR_RETURN_CODE}"
-}
-function err() {
-  ((_LOGGER_WRAP++)) || true
-  error "$*"
 }
