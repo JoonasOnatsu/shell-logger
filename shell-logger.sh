@@ -135,24 +135,24 @@ function _logger() {
   fi
 }
 
-function debug() {
+function log_debug() {
   ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_DEBUG}" "$*"
 }
-function info() {
+function log_info() {
   ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_INFO}" "$*"
 }
-function notice() {
+function log_notice() {
   ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_NOTICE}" "$*"
 }
-function warn() {
+function log_warn() {
   ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_WARNING}" "$*"
 }
 
-function err() {
+function log_err() {
   ((_LOGGER_WRAP++)) || true
 
   if [[ ${LOGGER_ERROR_TRACE:-false} == true ]]; then
