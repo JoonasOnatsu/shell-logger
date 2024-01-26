@@ -69,51 +69,33 @@ function _logger_version() {
   printf '%s %s %s\n' "${LOGGER_NAME}" "${LOGGER_VERSION}" "${LOGGER_DATE}"
 }
 
-function _validate_level() {
-  [[ $# -eq 0 ]] && return 1
-  if [[ $1 -ge ${LOG_LEVEL_DEBUG} ]] && [[ $1 -le ${LOG_LEVEL_ERROR} ]]; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-function _logger_level_str() {
-  [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
-  [[ $# -eq 0 ]] && return
-  _validate_level "$1" || return
-  printf '[%s]' "${LOGGER_LEVELS[${1:-1}]}"
-}
-
-function _logger_file_str() {
-  local idx=${1:-0}
-
-  if [[ -n ${BASH_VERSION} ]]; then
-    printf '[%s]' "${BASH_SOURCE[$((idx + 1))]}:${BASH_LINENO[${idx}]}"
-  elif [[ -n ${ZSH_VERSION-} ]]; then
-    emulate -L ksh
-    printf '[%s]' "${funcfiletrace[${idx}]}"
-  fi
-}
-
 function _logger() {
+  [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
 
   ((_LOGGER_WRAP++)) || true
   local wrap=${_LOGGER_WRAP}
   _LOGGER_WRAP=0
 
+  # Validate input log level.
   [[ $# -eq 0 ]] && return
-  _validate_level "$1" || return
   [[ $1 -lt ${LOGGER_LEVEL} ]] && return
+  if [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; then
+    return
+  fi
 
   local level=${1:-1}
   shift
 
   # Construct the message prefix.
-  local msg_prefix="$(date +"${LOGGER_DATE_FORMAT}")$(_logger_file_str "${wrap}")$(_logger_level_str "${level}")"
+  local msg_prefix=
+  if [[ -n ${BASH_VERSION} ]]; then
+    msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${BASH_SOURCE[$((wrap + 1))]}:${BASH_LINENO[${wrap}]}] [${LOGGER_LEVELS[${level}]}]"
+  elif [[ -n ${ZSH_VERSION-} ]]; then
+    msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${funcfiletrace[${idx}]}] [${LOGGER_LEVELS[${level}]}]"
+  fi
 
   # Add prefix with a space only if prefix not is empty.
-  local msg="${msg_prefix:+${msg_prefix} }$*"
+  local msg="${msg_prefix:+"${msg_prefix} "}$*"
 
   # Escape $ is msg to be able to use eval below without trying to resolve a variable.
   msg="${msg/\$/\\\$}"
