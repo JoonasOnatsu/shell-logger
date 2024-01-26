@@ -94,12 +94,7 @@ function _logger() {
     msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${funcfiletrace[${idx}]}] [${LOGGER_LEVELS[${level}]}]"
   fi
 
-  # Add prefix with a space only if prefix not is empty.
-  local msg="${msg_prefix:+"${msg_prefix} "}$*"
-
-  # Escape $ is msg to be able to use eval below without trying to resolve a variable.
-  msg="${msg/\$/\\\$}"
-
+  # Output to stdout by default.
   local logger_print=printf
   local logger_outfile=1
 
@@ -109,12 +104,19 @@ function _logger() {
     logger_print=">&2 printf"
   fi
 
+  local printf_fmt=
+
+  # https://tldp.org/LDP/abs/html/fto.html
+
   if [[ ${LOGGER_COLOR} == "always" ]] || { [[ ${LOGGER_COLOR} == "auto" ]] && [[ -t ${logger_outfile} ]]; }; then
-    [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
-    eval "${logger_print} \"\\e[${LOGGER_COLORS[${level}]}m%s\\e[m\\n\"  \"${msg}\""
+    printf_fmt="\\e[${LOGGER_COLORS[${level}]}m%s\\e[0m\\n"
   else
-    eval "${logger_print} \"%s\\n\" \"${msg}\""
+    printf_fmt="%s\\n"
   fi
+
+  # Add prefix with a space only if prefix not is empty.
+  # Escape any funnies from the message, to keep eval from exploding.
+  eval "${logger_print} \"${printf_fmt}\"  \"${msg_prefix:+"${msg_prefix} "} $(printf '%q' "$*")\""
 }
 
 function log_debug() {
