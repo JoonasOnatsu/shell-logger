@@ -56,99 +56,116 @@ LOGGER_LEVELS=("DEBUG" "INFO" "NOTICE" "WARNING" "ERROR")
 
 # Default settings.
 LOGGER_DATE_FORMAT=${LOGGER_DATE_FORMAT:-'%Y/%m/%d %H:%M:%S'}
-LOGGER_LEVEL=${LOGGER_LEVEL:-1}
+LOGGER_LEVEL=${LOGGER_LEVEL:-0}
 LOGGER_STDERR_LEVEL=${LOGGER_STDERR_LEVEL:-4}
-LOGGER_DEBUG_COLOR=${LOGGER_DEBUG_COLOR:-"3"}
-LOGGER_INFO_COLOR=${LOGGER_INFO_COLOR:-""}
-LOGGER_NOTICE_COLOR=${LOGGER_NOTICE_COLOR:-"36"}
-LOGGER_WARNING_COLOR=${LOGGER_WARNING_COLOR:-"33"}
-LOGGER_ERROR_COLOR=${LOGGER_ERROR_COLOR:-"31"}
 LOGGER_COLOR=${LOGGER_COLOR:-auto}
-LOGGER_COLORS=("${LOGGER_DEBUG_COLOR}" "${LOGGER_INFO_COLOR}" "${LOGGER_NOTICE_COLOR}" "${LOGGER_WARNING_COLOR}" "${LOGGER_ERROR_COLOR}")
+
+LOGGER_COLORS=("${LOGGER_DEBUG_COLOR:-"3;32"}")  # Italic green
+LOGGER_COLORS+=("${LOGGER_INFO_COLOR:-"95"}")    # Bright Magenta
+LOGGER_COLORS+=("${LOGGER_NOTICE_COLOR:-"96"}")  # Bright Cyan
+LOGGER_COLORS+=("${LOGGER_WARNING_COLOR:-"93"}") # Bright Yellow
+LOGGER_COLORS+=("${LOGGER_ERROR_COLOR:-"91"}")   # Bright Red
+
 #LOGGER_ERROR_RETURN_CODE=${LOGGER_ERROR_RETURN_CODE:-100}
 #LOGGER_ERROR_TRACE=${LOGGER_ERROR_TRACE:-true}
-
-# Other global variables.
-_LOGGER_WRAP=0
 
 # Functions.
 function _logger_version() {
   printf '%s %s %s\n' "${LOGGER_NAME}" "${LOGGER_VERSION}" "${LOGGER_DATE}"
 }
 
+function _logger_use_colors() {
+
+  # Validate input log level.
+  if [[ $# -eq 0 ]] || { [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; }; then
+    return 1
+  fi
+
+  if [[ ${LOGGER_COLOR} == "always" ]]; then
+    return 0
+  fi
+
+  if [[ $1 -ge ${LOGGER_STDERR_LEVEL} ]]; then
+    # Test if stderr is attached to a terminal.
+    if [[ ${LOGGER_COLOR} == "auto" ]] && tty -s < /dev/fd/2 > /dev/null 2>&1; then
+      return 0
+    else
+      return 1
+    fi
+  else
+    # WIP: this doesn't work mostly for some reason, tty responds "not a tty" for stdout?
+    # if [[ ${LOGGER_COLOR} == "auto" ]] && tty < /dev/fd/1 2>&1; then
+    #  return 0
+    # else
+    #  return 1
+    # fi
+    [[ ${LOGGER_COLOR} == "auto" ]] && return 0 || return 1
+  fi
+}
+
+function _logger_get_color() {
+
+  # Validate input log level.
+  if [[ $# -eq 0 ]] || { [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; }; then
+    return 1
+  fi
+
+  printf '%s' "${LOGGER_COLORS[$1]}"
+}
+
+function _logger_get_printfmt() {
+
+  # Validate input log level.
+  if [[ $# -eq 0 ]] || { [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; }; then
+    return 1
+  fi
+
+  # Printf format strings need to be escaped for eval.
+  if _logger_use_colors "$1"; then
+    printf '\\e[%sm %%s: %%s\\e[0m\\n' "$(_logger_get_color "$1")"
+  else
+    printf '%%s: %%s\\n'
+  fi
+}
+
 function _logger() {
   [[ -n ${ZSH_VERSION-} ]] && emulate -L ksh
 
-  ((_LOGGER_WRAP++)) || true
-  local wrap=${_LOGGER_WRAP}
-  _LOGGER_WRAP=0
-
   # Validate input log level.
-  [[ $# -eq 0 ]] && return
-  [[ $1 -lt ${LOGGER_LEVEL} ]] && return
-  if [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; then
+  if [[ $# -eq 0 ]] || { [[ $1 -lt ${LOG_LEVEL_DEBUG} ]] || [[ $1 -gt ${LOG_LEVEL_ERROR} ]]; }; then
     return
   fi
+  [[ $1 -lt ${LOGGER_LEVEL} ]] && return
 
   local level=${1:-1}
   shift
 
   # Construct the message prefix.
-  local msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")]"
+  local msg_prefix="[$(date +"${LOGGER_DATE_FORMAT}")][${LOGGER_LEVELS[${level}]}]"
 
-  if [[ -n ${BASH_VERSION} ]]; then
-    if [[ -n "${BASH_SOURCE[$((wrap + 1))]}" ]] && [[ -n "${BASH_LINENO[${wrap}]}" ]]; then
-      msg_prefix+="[${BASH_SOURCE[$((wrap + 1))]}:${BASH_LINENO[${wrap}]}]"
-    fi
-  elif [[ -n ${ZSH_VERSION-} ]]; then
-    if [[ -n "${funcfiletrace[${wrap}]}" ]]; then
-      msg_prefix+="[${funcfiletrace[${wrap}]}]"
-    fi
-  fi
-  msg_prefix+="[${LOGGER_LEVELS[${level}]}]"
-
-  # Output to stdout by default.
-  local logger_print=printf
-  local logger_outfile=1
-
-  # Output to stderr also after certain level.
+  # Output to stderr after set level is reached.
   if [[ ${level} -ge ${LOGGER_STDERR_LEVEL} ]]; then
-    logger_outfile=2
-    logger_print=">&2 printf"
-  fi
-
-  local printf_fmt=
-
-
-
-  if [[ ${LOGGER_COLOR} == "always" ]] || { [[ ${LOGGER_COLOR} == "auto" ]] && [[ -t ${logger_outfile} ]]; }; then
-    printf_fmt="\\e[${LOGGER_COLORS[${level}]}m%s\\e[0m\\n"
+    # Escape any funnies from the message, to keep eval from exploding.
+    eval ">&2 printf \"$(_logger_get_printfmt "${level}")\"  \"${msg_prefix}\" \"$(printf '%q' "$*")\""
   else
-    printf_fmt='%s\n'
+    # Escape any funnies from the message, to keep eval from exploding.
+    eval "printf \"$(_logger_get_printfmt "${level}")\"  \"${msg_prefix}\" \"$(printf '%q' "$*")\""
   fi
-
-  # Escape any funnies from the message, to keep eval from exploding.
-  eval "${logger_print} \"${printf_fmt}\"  \"${msg_prefix} $(printf '%q' "$*")\""
 }
 
 function log_debug() {
-  ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_DEBUG}" "$*"
 }
 function log_info() {
-  ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_INFO}" "$*"
 }
 function log_notice() {
-  ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_NOTICE}" "$*"
 }
 function log_warn() {
-  ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_WARNING}" "$*"
 }
 function log_err() {
-  ((_LOGGER_WRAP++)) || true
   _logger "${LOG_LEVEL_ERROR}" "$*"
 }
 
